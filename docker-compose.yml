@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  tts_bot:
+    build: .
+    container_name: tts_bot_container
+    volumes:
+      - tts_bot_audio:/app/tts_bot_audio
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+
+volumes:
+  tts_bot_audio:
