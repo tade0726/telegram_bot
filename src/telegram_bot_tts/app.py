@@ -34,6 +34,7 @@ AUDIO_FOLDER = "/tts_bot_audio"
 
 # helper
 
+
 def create_audio_folder():
     audio_folder = Path(AUDIO_FOLDER)
     audio_folder.mkdir(exist_ok=True, parents=True)
@@ -45,6 +46,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "You can input any text and I will return its audio file."
     )
+
 
 # Responses
 def handle_respone(text: str) -> str:
