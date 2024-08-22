@@ -20,4 +20,4 @@ WORKDIR /app
 RUN uv sync
 
 # Presuming there is a `my_app` command provided by the project
-CMD ["uv", "run", "src/tts_bot/app.py"]
+CMD ["uv", "run", "src/telegram_bot_tts/app.py"]
