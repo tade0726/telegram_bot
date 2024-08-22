@@ -8,6 +8,8 @@ services:
       - "8080:8080"
     env_file:
       - .env
+    environment:
+      - ENV=prod
 
 volumes:
   tts_bot_audio:

@@ -6,33 +6,28 @@ from telegram.ext import (
     MessageHandler,
     filters,
     ContextTypes,
+    CallbackContext,
 )
 
 from pathlib import Path
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 
 from os import environ
 
-import logging
-
-# logging
-
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+from telegram_bot_tts.logger import setup_logger
 
 
 TOKEN: Final = environ.get("TELEGRAM_BOT_TOKEN")
 BOT_USERNAME: Final = "@openaitts_bot"
 USERS_ALLOWED: Final = (626730440, 859920241)
+ENV: Final = environ.get("ENV", "dev")
+OPENAI_CLIENT: AsyncOpenAI = AsyncOpenAI()
 
-CLIENT = OpenAI()
+AUDIO_FOLDER = "/tts_bot_audio" if ENV == "prod" else "/tmp/tts_bot_audio"
 
 
-AUDIO_FOLDER = "/tts_bot_audio"
-
-
-# helper
+# logging
+logger = setup_logger("telegram_bot_tts", ENV)
 
 
 def create_audio_folder():
@@ -58,14 +53,12 @@ def text_response(text: str) -> str:
     return text
 
 
-def tts_response(text: str) -> object:
-
-    global CLIENT
+async def tts_response(text: str, client: AsyncOpenAI) -> object:
     # I want to save the audio file in a temporary directory with a unique name, such as a msg id
     audio_file_name = str(text[:10].replace(" ", "_"))
     speech_file_path = Path(AUDIO_FOLDER) / f"{audio_file_name}.mp3"
 
-    response = CLIENT.audio.speech.create(model="tts-1", voice="nova", input=text)
+    response = await client.audio.speech.create(model="tts-1", voice="nova", input=text)
 
     # Write the response content to a file
     with open(speech_file_path, "wb") as file:
@@ -76,14 +69,13 @@ def tts_response(text: str) -> object:
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     global USERS_ALLOWED
 
     massage_type: str = update.message.chat.type
-    user_id: int = update.message.chat.id
+    user_id: int = update.message.from_user.id
     text: str = update.message.text
 
-    logging.debug(f'User ({update.message.chat.id}) in {massage_type}: "{text}"')
+    logger.debug(f'User ({update.message.chat.id}) in {massage_type}: "{text}"')
 
     if user_id not in USERS_ALLOWED:
         await update.message.reply_text(
@@ -101,23 +93,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         response: str = handle_respone(text)
 
-    logging.debug("Bot:", response)
+    logger.debug(f"Bot reply: {response}")
 
     # return the audio file
-    audio_path = tts_response(response)
+    audio_path = await tts_response(response, client=OPENAI_CLIENT)
 
     await update.message.reply_voice(voice=audio_path)
 
 
 async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logging.error(f"Update {update} caused error {context.error}")
+    logger.error(f"Update {update} caused error {context.error}")
 
 
 if __name__ == "__main__":
-
     create_audio_folder()
 
-    logging.info("starting bot...")
+    logger.info("starting bot...")
     app = Application.builder().token(TOKEN).build()
 
     # Commands
@@ -131,5 +122,6 @@ if __name__ == "__main__":
     app.add_error_handler(error)
 
     # polls the bot
-    logging.info("Polling...")
+    logger.info("Polling...")
+
     app.run_polling(poll_interval=3)
