@@ -24,7 +24,7 @@ if __name__ == "__main__":
     create_audio_folder()
 
     logger.info("starting bot...")
-    app = Application.builder().token(TOKEN).read_timeout(30).write_timeout(45).build()
+    app = Application.builder().token(TOKEN).read_timeout(30).write_timeout(90).build()
 
     # Commands
     app.add_handler(CommandHandler("start", start_command))
