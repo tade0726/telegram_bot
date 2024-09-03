@@ -10,6 +10,32 @@ services:
       - .env
     environment:
       - ENV=prod
+    networks:
+      - app-network
+
+  db:
+    build:
+      context: ./postgres
+      dockerfile: Dockerfile
+    container_name: user-system-db
+    env_file:
+      - .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d user_system"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  app-network:
+    driver: bridge
 
 volumes:
   tts_bot_audio:
+  postgres_data:
