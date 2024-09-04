@@ -1,174 +1,284 @@
-import uuid
-from datetime import datetime, date
+'''
+Todo:
+    - add logging
+'''
+
+
 from sqlalchemy import (
     create_engine,
     Column,
-    String,
     Integer,
-    DateTime,
-    Date,
-    Enum,
-    ForeignKey,
+    String,
     Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
 )
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.sql import func
+from sqlalchemy import text
+
+from datetime import datetime, timedelta
+import os
+
 
 Base = declarative_base()
 
 
+
 class User(Base):
     __tablename__ = "users"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Integer, primary_key=True)
     username = Column(String(50), unique=True, nullable=False)
     email = Column(String(100), unique=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    is_premier = Column(Boolean, default=False, nullable=False)
-
-    behaviors = relationship("UserBehavior", back_populates="user")
-    limits = relationship("UserLimit", back_populates="user")
+    password_hash = Column(String(255), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
-class UserBehavior(Base):
-    __tablename__ = "user_behaviors"
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+    subscription_id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"))
+    plan_name = Column(String(50), nullable=False)
+    is_active = Column(Boolean, default=True)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date)
+    tts_monthly_limit = Column(Integer)
+    stt_monthly_limit = Column(Integer)
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    function_type = Column(Enum("text_to_audio", "audio_to_text", name="function_type"))
-    tokens_used = Column(Integer, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
 
-    user = relationship("User", back_populates="behaviors")
+class Payment(Base):
+    __tablename__ = "payments"
+    payment_id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"))
+    subscription_id = Column(Integer, ForeignKey("subscriptions.subscription_id"))
+    amount = Column(Float, nullable=False)
+    payment_date = Column(DateTime(timezone=True), server_default=func.now())
+    payment_method = Column(String(50))
 
 
-class UserLimit(Base):
-    __tablename__ = "user_limits"
+class TTSActivity(Base):
+    __tablename__ = "tts_activity"
+    tts_activity_id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"))
+    character_count = Column(Integer, nullable=False)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    total_tokens_limit = Column(Integer, nullable=False)
-    tokens_used = Column(Integer, default=0)
-    reset_date = Column(Date, nullable=False)
 
-    user = relationship("User", back_populates="limits")
+class STTActivity(Base):
+    __tablename__ = "stt_activity"
+    stt_activity_id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"))
+    duration_seconds = Column(Integer, nullable=False)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class DBManager:
-    def __init__(self, db_url):
+    def __init__(self, db_url=None):
+        if db_url is None:
+            db_username = os.getenv("DB_USERNAME")
+            db_password = os.getenv("DB_PASSWORD")
+            db_host = os.getenv("DB_HOST")
+            db_port = os.getenv("DB_PORT")
+            db_name = os.getenv("DB_NAME")
+
+            if any(
+                var is None
+                for var in [db_username, db_password, db_host, db_port, db_name]
+            ):
+                raise ValueError(
+                    "One or more required database environment variables are missing."
+                )
+
+            db_url = f"postgresql://{db_username}:{db_password}@{db_host}:{db_port}/{db_name}"
+
         self.engine = create_engine(db_url)
         Base.metadata.create_all(self.engine)
         self.Session = sessionmaker(bind=self.engine)
 
-    def create_user(self, username, email, is_premier=False):
+    def add_user(self, user_id, username, email, password_hash):
         session = self.Session()
-        new_user = User(username=username, email=email, is_premier=is_premier)
-        session.add(new_user)
-        session.commit()
-        user_id = new_user.id
-        session.close()
-        return user_id
+        try:
+            # Check if user_id, username, or email already exist
+            existing_user = (
+                session.query(User)
+                .filter(
+                    (User.user_id == user_id)
+                    | (User.username == username)
+                    | (User.email == email)
+                )
+                .first()
+            )
 
-    def get_user(self, user_id):
-        session = self.Session()
-        user = session.query(User).filter(User.id == user_id).first()
-        session.close()
-        return user
+            if existing_user:
+                session.close()
+                return None  # User already exists
 
-    def update_user_premier_status(self, user_id, is_premier):
-        session = self.Session()
-        user = session.query(User).filter(User.id == user_id).first()
-        if user:
-            user.is_premier = is_premier
-            user.updated_at = datetime.utcnow()
+            # If no existing user found, create a new one
+            new_user = User(
+                user_id=user_id,
+                username=username,
+                email=email,
+                password_hash=password_hash,
+            )
+            session.add(new_user)
             session.commit()
-        session.close()
+            user_id = new_user.user_id
+            return user_id
+        except Exception as e:
+            session.rollback()
+            raise e
+        finally:
+            session.close()
 
-    def record_behavior(self, user_id, function_type, tokens_used):
+    def add_subscription(
+        self, user_id, plan_name, start_date, end_date, tts_limit, stt_limit
+    ):
         session = self.Session()
-        new_behavior = UserBehavior(
-            user_id=user_id, function_type=function_type, tokens_used=tokens_used
-        )
-        session.add(new_behavior)
-        session.commit()
-        session.close()
-
-    def get_user_behaviors(self, user_id):
-        session = self.Session()
-        behaviors = (
-            session.query(UserBehavior).filter(UserBehavior.user_id == user_id).all()
-        )
-        session.close()
-        return behaviors
-
-    def set_user_limit(self, user_id, total_tokens_limit, reset_date):
-        session = self.Session()
-        new_limit = UserLimit(
+        new_subscription = Subscription(
             user_id=user_id,
-            total_tokens_limit=total_tokens_limit,
-            reset_date=reset_date,
+            plan_name=plan_name,
+            start_date=start_date,
+            end_date=end_date,
+            tts_monthly_limit=tts_limit,
+            stt_monthly_limit=stt_limit,
         )
-        session.add(new_limit)
+        session.add(new_subscription)
         session.commit()
+        subscription_id = new_subscription.subscription_id
         session.close()
+        return subscription_id
 
-    def update_user_tokens(self, user_id, tokens_used):
+    def add_payment(self, user_id, subscription_id, amount, payment_method):
         session = self.Session()
-        user_limit = (
-            session.query(UserLimit).filter(UserLimit.user_id == user_id).first()
+        new_payment = Payment(
+            user_id=user_id,
+            subscription_id=subscription_id,
+            amount=amount,
+            payment_method=payment_method,
         )
-        if user_limit:
-            user_limit.tokens_used += tokens_used
+        session.add(new_payment)
+        session.commit()
+        payment_id = new_payment.payment_id
+        session.close()
+        return payment_id
+
+    def add_tts_activity(self, user_id, character_count):
+        session = self.Session()
+        new_activity = TTSActivity(user_id=user_id, character_count=character_count)
+        session.add(new_activity)
+        session.commit()
+        activity_id = new_activity.tts_activity_id
+        session.close()
+        return activity_id
+
+    def add_stt_activity(self, user_id, duration_seconds):
+        session = self.Session()
+        new_activity = STTActivity(user_id=user_id, duration_seconds=duration_seconds)
+        session.add(new_activity)
+        session.commit()
+        activity_id = new_activity.stt_activity_id
+        session.close()
+        return activity_id
+
+    def create_stt_usage_view(self):
+        session = self.Session()
+        try:
+            session.execute(
+                text(
+                    """
+                CREATE OR REPLACE VIEW stt_usage AS
+                SELECT u.user_id,
+                       u.username,
+                       s.plan_name,
+                       s.stt_monthly_limit,
+                       COALESCE(SUM(sa.duration_seconds), 0::bigint) AS total_stt_usage,
+                       s.stt_monthly_limit - COALESCE(SUM(sa.duration_seconds), 0::bigint) AS remaining_stt_limit
+                FROM users u
+                LEFT JOIN subscriptions s ON u.user_id = s.user_id AND s.is_active = true
+                LEFT JOIN stt_activity sa ON u.user_id = sa.user_id AND sa.timestamp >= 
+                    date_trunc('month'::text, CURRENT_DATE::timestamp with time zone)
+                GROUP BY u.user_id, u.username, s.plan_name, s.stt_monthly_limit
+            """
+                )
+            )
             session.commit()
-        session.close()
+            print("STT usage view created successfully.")
+        except Exception as e:
+            session.rollback()
+            print(f"Error creating STT usage view: {str(e)}")
+        finally:
+            session.close()
 
-    def check_user_limit(self, user_id):
+    def create_tts_usage_view(self):
         session = self.Session()
-        user_limit = (
-            session.query(UserLimit).filter(UserLimit.user_id == user_id).first()
-        )
-        if user_limit:
-            remaining_tokens = user_limit.total_tokens_limit - user_limit.tokens_used
-            is_within_limit = remaining_tokens > 0
-        else:
-            remaining_tokens = 0
-            is_within_limit = False
-        session.close()
-        return is_within_limit, remaining_tokens
+        try:
+            session.execute(
+                text(
+                    """
+                CREATE OR REPLACE VIEW tts_usage AS
+                SELECT u.user_id,
+                       u.username,
+                       s.plan_name,     
+                       s.tts_monthly_limit,
+                       COALESCE(SUM(ta.character_count), 0::bigint) AS total_tts_usage,
+                       s.tts_monthly_limit - COALESCE(SUM(ta.character_count), 0::bigint) AS remaining_tts_limit
+                FROM users u
+                LEFT JOIN subscriptions s ON u.user_id = s.user_id AND s.is_active = true
+                LEFT JOIN tts_activity ta ON u.user_id = ta.user_id AND ta.timestamp >= 
+                    date_trunc('month'::text, CURRENT_DATE::timestamp with time zone)
+                GROUP BY u.user_id, u.username, s.plan_name, s.tts_monthly_limit
+            """
+                )
+            )
+            session.commit()
+            print("TTS usage view created successfully.")
+        except Exception as e:
+            session.rollback()
+            print(f"Error creating TTS usage view: {str(e)}")
+        finally:
+            session.close()
+
+    def get_user_stt_usage(self, user_id):
+        session = self.Session()
+        try:
+            result = session.execute(
+                text("SELECT * FROM stt_usage WHERE user_id = :user_id"),
+                {"user_id": user_id},
+            ).fetchone()
+            return result
+        except Exception as e:
+            print(f"Error fetching STT usage: {str(e)}")
+            return None
+        finally:
+            session.close()
+            
+    def get_user_tts_usage(self, user_id):
+        session = self.Session()
+        try:
+            result = session.execute(
+                text("SELECT * FROM tts_usage WHERE user_id = :user_id"),
+                {"user_id": user_id},
+            ).fetchone()
+            return result
+        except Exception as e:
+            print(f"Error fetching TTS usage: {str(e)}")
+            return None
+        finally:
+            session.close()
 
 
-# Usage example
 if __name__ == "__main__":
-    
-    db_url = "postgresql://admin:secure_password@127.0.0.1:5432/user_system"
-    
-    db_manager = DBManager(db_url)
 
-    # Create a new user
-    user_id = db_manager.create_user("johndoe", "john@example.com", is_premier=False)
+    # Create a DBManager instance
+    db_manager = DBManager()
 
-    # Set user limit
-    db_manager.set_user_limit(user_id, 1000, date.today())
+    # Create views
+    if True:
+        db_manager.create_stt_usage_view()
+        db_manager.create_tts_usage_view()
 
-    # Record user behavior
-    db_manager.record_behavior(user_id, "text_to_audio", 50)
-
-    # Check user limit
-    is_within_limit, remaining_tokens = db_manager.check_user_limit(user_id)
-    print(f"User within limit: {is_within_limit}, Remaining tokens: {remaining_tokens}")
-
-    # Get user behaviors
-    behaviors = db_manager.get_user_behaviors(user_id)
-    for behavior in behaviors:
-        print(
-            f"Function: {behavior.function_type}, Tokens used: {behavior.tokens_used}"
-        )
-
-    # Update user's premier status
-    db_manager.update_user_premier_status(user_id, True)
-
-    # Get updated user info
-    updated_user = db_manager.get_user(user_id)
-    print(f"User {updated_user.username} is premier: {updated_user.is_premier}")
+    # print user stt usage
+    print(db_manager.get_user_stt_usage(3))

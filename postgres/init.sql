@@ -1,33 +1,46 @@
--- Create Users table
-CREATE TABLE Users (
-    id UUID PRIMARY KEY,
+-- Users table
+CREATE TABLE users (
+    user_id SERIAL PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    is_premier BOOLEAN NOT NULL DEFAULT FALSE,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create UserBehaviors table
-CREATE TABLE UserBehaviors (
-    id UUID PRIMARY KEY,
-    user_id UUID REFERENCES Users(id),
-    function_type TEXT NOT NULL,
-    tokens_used INTEGER NOT NULL,
-    timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+-- Subscriptions table
+CREATE TABLE subscriptions (
+    subscription_id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(user_id),
+    plan_name VARCHAR(50) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    start_date DATE NOT NULL,
+    end_date DATE,
+    tts_monthly_limit INTEGER,
+    stt_monthly_limit INTEGER
 );
 
--- Create UserLimits table
-CREATE TABLE UserLimits (
-    id UUID PRIMARY KEY,
-    user_id UUID REFERENCES Users(id),
-    total_tokens_limit INTEGER NOT NULL,
-    tokens_used INTEGER NOT NULL DEFAULT 0,
-    reset_date DATE NOT NULL
+-- Payments table
+CREATE TABLE payments (
+    payment_id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(user_id),
+    subscription_id INTEGER REFERENCES subscriptions(subscription_id),
+    amount DECIMAL(10, 2) NOT NULL,
+    payment_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    payment_method VARCHAR(50)
 );
 
--- Create enum type for function_type
-CREATE TYPE function_type AS ENUM ('text_to_audio', 'audio_to_text');
+-- TTS activity table
+CREATE TABLE tts_activity (
+    tts_activity_id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(user_id),
+    character_count INTEGER NOT NULL,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
 
--- Alter UserBehaviors table to use the new enum type
-ALTER TABLE UserBehaviors ALTER COLUMN function_type TYPE function_type USING function_type::function_type;
+-- STT activity table
+CREATE TABLE stt_activity (
+    stt_activity_id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(user_id),
+    duration_seconds INTEGER NOT NULL,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
