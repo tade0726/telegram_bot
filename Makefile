@@ -1,5 +1,5 @@
 format:
-	black src/
+	black src/ tests/
 
 build:
 	docker-compose up -d --build
@@ -11,4 +11,4 @@ local_run:
 	uv run src/telegram_bot_tts/app.py
 
 test:
-	PYTHONPATH=. pytest tests
+	PYTHONPATH=. uv run pytest tests 

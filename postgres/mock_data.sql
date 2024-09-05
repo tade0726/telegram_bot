@@ -1,14 +1,14 @@
 -- Insert mock users
-INSERT INTO users (username, email, password_hash) VALUES
-('john_doe', 'john@example.com', 'hashed_password_1'),
-('jane_smith', 'jane@example.com', 'hashed_password_2'),
-('bob_johnson', 'bob@example.com', 'hashed_password_3');
+INSERT INTO users (user_id, username, email) VALUES
+(1, 'john_doe', 'john@example.com'),
+(2, 'jane_smith', 'jane@example.com'),
+(3, 'bob_johnson', 'bob@example.com');
 
 -- Insert mock subscriptions
-INSERT INTO subscriptions (user_id, plan_name, is_active, start_date, end_date, tts_monthly_limit, stt_monthly_limit) VALUES
-(1, 'Basic', TRUE, '2024-01-01', '2024-12-31', 10000, 3600),
-(2, 'Premium', TRUE, '2024-01-15', '2025-01-14', 50000, 18000),
-(3, 'Free', TRUE, '2024-02-01', NULL, 5000, 1800);
+INSERT INTO subscriptions (subscription_id, user_id, plan_name, is_active, start_date, end_date, tts_monthly_limit, stt_monthly_limit) VALUES
+(1, 1, 'Basic', TRUE, '2024-01-01', '2024-12-31', 10000, 3600),
+(2, 2, 'Premium', TRUE, '2024-01-15', '2025-01-14', 50000, 18000),
+(3, 3, 'Free', TRUE, '2024-02-01', NULL, 5000, 1800);
 
 -- Insert mock payments
 INSERT INTO payments (user_id, subscription_id, amount, payment_method) VALUES
@@ -44,9 +44,3 @@ UNION ALL
 SELECT 'tts_activity', COUNT(*) FROM tts_activity
 UNION ALL
 SELECT 'stt_activity', COUNT(*) FROM stt_activity;
-
--- Check TTS usage
-SELECT * FROM tts_usage;
-
--- Check STT usage
-SELECT * FROM stt_usage;

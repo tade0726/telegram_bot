@@ -328,6 +328,18 @@ wheels = [
 ]
 
 [[package]]
+name = "pytest-asyncio"
+version = "0.24.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/52/6d/c6cf50ce320cf8611df7a1254d86233b3df7cc07f9b5f5cbcb82e08aa534/pytest_asyncio-0.24.0.tar.gz", hash = "sha256:d081d828e576d85f875399194281e92bf8a68d60d72d1a2faf2feddb6c46b276", size = 49855 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/96/31/6607dab48616902f76885dfcf62c08d929796fc3b2d2318faf9fd54dbed9/pytest_asyncio-0.24.0-py3-none-any.whl", hash = "sha256:a811296ed596b69bf0b6f3dc40f83bcaf341b155a269052d82efa2b25ac7037b", size = 18024 },
+]
+
+[[package]]
 name = "python-telegram-bot"
 version = "21.4"
 source = { registry = "https://pypi.org/simple" }
@@ -370,6 +382,18 @@ wheels = [
 ]
 
 [[package]]
+name = "sqlalchemy-cockroachdb"
+version = "2.0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "sqlalchemy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f2/48/300113edbe1e2d2ad74efbc9b2865acb404019f37cc79e9878a47c984a08/sqlalchemy-cockroachdb-2.0.2.tar.gz", hash = "sha256:119756eb905855d6a11345b99cfe853031a3fe598a9c4bf35a8ddac9f89fe8cc", size = 27781 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/db/31/26d9d5f59183f28ea79aaf713a6984bedbb96d1f4b7388ec68b98dbe27ea/sqlalchemy_cockroachdb-2.0.2-py3-none-any.whl", hash = "sha256:0d5d50e805b024cb2ccd85423a5c1a367d1a56a5cd0ea47765233fd47665070d", size = 21432 },
+]
+
+[[package]]
 name = "telegram-bot-tts"
 version = "0.1.0"
 source = { editable = "." }
@@ -378,12 +402,14 @@ dependencies = [
     { name = "psycopg2-binary" },
     { name = "python-telegram-bot" },
     { name = "sqlalchemy" },
+    { name = "sqlalchemy-cockroachdb" },
 ]
 
 [package.dev-dependencies]
 dev = [
     { name = "black" },
     { name = "pytest" },
+    { name = "pytest-asyncio" },
 ]
 
 [package.metadata]
@@ -392,12 +418,14 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = ">=2.9.9" },
     { name = "python-telegram-bot", specifier = ">=21.4" },
     { name = "sqlalchemy", specifier = ">=2.0.32" },
+    { name = "sqlalchemy-cockroachdb", specifier = ">=2.0.2" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "black", specifier = ">=24.8.0" },
-    { name = "pytest" },
+    { name = "pytest", specifier = ">=8.3.2" },
+    { name = "pytest-asyncio", specifier = ">=0.24.0" },
 ]
 
 [[package]]

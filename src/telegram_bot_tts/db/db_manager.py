@@ -1,8 +1,7 @@
-'''
+"""
 Todo:
     - add logging
-'''
-
+"""
 
 from sqlalchemy import (
     create_engine,
@@ -16,16 +15,15 @@ from sqlalchemy import (
     ForeignKey,
 )
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine
 from sqlalchemy.sql import func
 from sqlalchemy import text
 
-from datetime import datetime, timedelta
 import os
 
 
 Base = declarative_base()
-
 
 
 class User(Base):
@@ -33,7 +31,6 @@ class User(Base):
     user_id = Column(Integer, primary_key=True)
     username = Column(String(50), unique=True, nullable=False)
     email = Column(String(100), unique=True, nullable=False)
-    password_hash = Column(String(255), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -78,21 +75,7 @@ class STTActivity(Base):
 class DBManager:
     def __init__(self, db_url=None):
         if db_url is None:
-            db_username = os.getenv("DB_USERNAME")
-            db_password = os.getenv("DB_PASSWORD")
-            db_host = os.getenv("DB_HOST")
-            db_port = os.getenv("DB_PORT")
-            db_name = os.getenv("DB_NAME")
-
-            if any(
-                var is None
-                for var in [db_username, db_password, db_host, db_port, db_name]
-            ):
-                raise ValueError(
-                    "One or more required database environment variables are missing."
-                )
-
-            db_url = f"postgresql://{db_username}:{db_password}@{db_host}:{db_port}/{db_name}"
+            db_url = os.environ["DATABASE_URL"]
 
         self.engine = create_engine(db_url)
         Base.metadata.create_all(self.engine)
@@ -194,8 +177,8 @@ class DBManager:
                        u.username,
                        s.plan_name,
                        s.stt_monthly_limit,
-                       COALESCE(SUM(sa.duration_seconds), 0::bigint) AS total_stt_usage,
-                       s.stt_monthly_limit - COALESCE(SUM(sa.duration_seconds), 0::bigint) AS remaining_stt_limit
+                       COALESCE(SUM(sa.duration_seconds), 0) AS total_stt_usage,
+                       s.stt_monthly_limit - COALESCE(SUM(sa.duration_seconds), 0) AS remaining_stt_limit
                 FROM users u
                 LEFT JOIN subscriptions s ON u.user_id = s.user_id AND s.is_active = true
                 LEFT JOIN stt_activity sa ON u.user_id = sa.user_id AND sa.timestamp >= 
@@ -223,8 +206,8 @@ class DBManager:
                        u.username,
                        s.plan_name,     
                        s.tts_monthly_limit,
-                       COALESCE(SUM(ta.character_count), 0::bigint) AS total_tts_usage,
-                       s.tts_monthly_limit - COALESCE(SUM(ta.character_count), 0::bigint) AS remaining_tts_limit
+                       COALESCE(SUM(ta.character_count), 0) AS total_tts_usage,
+                       s.tts_monthly_limit - COALESCE(SUM(ta.character_count), 0) AS remaining_tts_limit
                 FROM users u
                 LEFT JOIN subscriptions s ON u.user_id = s.user_id AND s.is_active = true
                 LEFT JOIN tts_activity ta ON u.user_id = ta.user_id AND ta.timestamp >= 
@@ -254,7 +237,7 @@ class DBManager:
             return None
         finally:
             session.close()
-            
+
     def get_user_tts_usage(self, user_id):
         session = self.Session()
         try:
@@ -269,11 +252,59 @@ class DBManager:
         finally:
             session.close()
 
+    def execute_sql_file(self, file):
+        session = self.Session()
+        try:
+            session.execute(text(file.read()))
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            print(f"Error executing SQL file: {str(e)}")
+        finally:
+            session.close()
+
+    def drop_tables(self):
+        session = self.Session()
+        try:
+            # drop views first
+            session.execute(text("DROP VIEW IF EXISTS stt_usage CASCADE"))
+            session.execute(text("DROP VIEW IF EXISTS tts_usage CASCADE"))
+
+            # drop tables
+            session.execute(text("DROP TABLE IF EXISTS users CASCADE"))
+            session.execute(text("DROP TABLE IF EXISTS subscriptions CASCADE"))
+            session.execute(text("DROP TABLE IF EXISTS payments CASCADE"))
+            session.execute(text("DROP TABLE IF EXISTS tts_activity CASCADE"))
+            session.execute(text("DROP TABLE IF EXISTS stt_activity CASCADE"))
+        except Exception as e:
+            session.rollback()
+            print(f"Error dropping tables: {str(e)}")
+        finally:
+            session.close()
+
 
 if __name__ == "__main__":
-
     # Create a DBManager instance
     db_manager = DBManager()
+
+    if False:
+        db_manager.drop_tables()
+
+    # init tables using mock data from mock_data.sql, also using the table classes to create the tables
+    if True:
+        db_manager.execute_sql_file(
+            open(
+                os.path.join(
+                    os.path.dirname(__file__),
+                    "..",
+                    "..",
+                    "..",
+                    "postgres",
+                    "mock_data.sql",
+                ),
+                "r",
+            )
+        )
 
     # Create views
     if True:

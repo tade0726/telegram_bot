@@ -9,6 +9,7 @@ dependencies = [
     "openai>=1.42.0",
     "sqlalchemy>=2.0.32",
     "psycopg2-binary>=2.9.9",
+    "sqlalchemy-cockroachdb>=2.0.2",
 ]
 
 [build-system]
@@ -19,4 +20,5 @@ build-backend = "hatchling.build"
 dev-dependencies = [
     "black>=24.8.0",
     "pytest>=8.3.2",
+    "pytest-asyncio>=0.24.0",
 ]

@@ -23,10 +23,15 @@ def text_response(text: str) -> str:
     return text
 
 
-async def tts_response(text: str, client: AsyncOpenAI) -> object:
+async def tts_response(text: str, client: AsyncOpenAI, audio_path: str = None) -> str:
     # I want to save the audio file in a temporary directory with a unique name, such as a msg id
     audio_file_name = str(text[:10].replace(" ", "_"))
-    speech_file_path = Path(AUDIO_FOLDER) / f"{audio_file_name}.mp3"
+
+    speech_file_path = (
+        Path(AUDIO_FOLDER) / f"{audio_file_name}.mp3"
+        if audio_path is None
+        else audio_path
+    )
 
     response = await client.audio.speech.create(model="tts-1", voice="nova", input=text)
 
@@ -36,6 +41,14 @@ async def tts_response(text: str, client: AsyncOpenAI) -> object:
             file.write(chunk)
 
     return speech_file_path
+
+
+async def stt_response(audio_path: str, client: AsyncOpenAI) -> str:
+    audio_file = open(audio_path, "rb")
+    transcript = await client.audio.transcriptions.create(
+        model="whisper-1", file=audio_file
+    )
+    return transcript.text
 
 
 async def handle_message(
