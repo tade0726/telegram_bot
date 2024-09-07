@@ -1,5 +1,7 @@
 import logging
 from pathlib import Path
+from typing import Union
+import io
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -8,15 +10,12 @@ from openai import AsyncOpenAI
 from telegram_bot_tts.constants import (
     USERS_ALLOWED,
     BOT_USERNAME,
-    OPENAI_CLIENT,
     AUDIO_FOLDER,
 )
 
+from telegram_bot_tts.db.db_manager import DBManager
 
 # Responses
-def handle_respone(text: str) -> str:
-    # todo
-    return text_response(text)
 
 
 def text_response(text: str) -> str:
@@ -43,50 +42,96 @@ async def tts_response(text: str, client: AsyncOpenAI, audio_path: str = None) -
     return speech_file_path
 
 
-async def stt_response(audio_path: str, client: AsyncOpenAI) -> str:
-    audio_file = open(audio_path, "rb")
+async def stt_response(audio: Union[bytes, str], client: AsyncOpenAI) -> str:
+
+    if isinstance(audio, str):
+        audio_file = open(audio, "rb")
+    elif isinstance(audio, Union[bytes, io.BytesIO]):
+        audio_file = audio
+    else:
+        raise ValueError("Invalid audio type")
+
     transcript = await client.audio.transcriptions.create(
         model="whisper-1", file=audio_file
     )
     return transcript.text
 
 
-async def handle_message(
-    update: Update, context: ContextTypes.DEFAULT_TYPE, logger: logging.Logger
+async def handle_text_message(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    logger: logging.Logger,
+    client: AsyncOpenAI,
+    db_manager: DBManager,
 ):
-    global USERS_ALLOWED
 
+    user_id: int = update.message.from_user.id
     massage_type: str = update.message.chat.type
     user_id: int = update.message.from_user.id
     text: str = update.message.text
 
-    logger.debug(f'User ({update.message.chat.id}) in {massage_type}: "{text}"')
+    logger.debug(f'User ({user_id}) in {massage_type}: "{text}"')
 
-    if user_id not in USERS_ALLOWED:
-        await update.message.reply_text(
-            "You are not allowed to use this bot. Contact the author for more information."
-        )
+    # checking if the user have registered
+    if not db_manager.is_user_registered(user_id):
+        await update.message.reply_text("Please use /start cmd to register first.")
         return
 
     if massage_type in ("group", "supergroup"):
         if BOT_USERNAME in text:
             new_text: str = text.replace(BOT_USERNAME, "")
-            response: str = handle_respone(new_text)
+            response: str = text_response(new_text)
             text = new_text
         else:
             return
     else:
-        response: str = handle_respone(text)
+        response: str = text_response(text)
 
     logger.debug(f"Bot reply: {response}")
 
     # return the audio file
-    audio_path = await tts_response(response, client=OPENAI_CLIENT)
+    audio_path = await tts_response(response, client)
 
-    await update.message.reply_voice(voice=audio_path)
+    await update.message.reply_voice(voice=audio_path, quote=True)
+
+
+async def handle_voice_message(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    logger: logging.Logger,
+    client: AsyncOpenAI,
+    db_manager: DBManager,
+):
+
+    user_id: int = update.message.from_user.id
+    massage_type: str = update.message.chat.type
+    voice_file_id: str = update.message.voice.file_id
+    voice_file = await context.bot.get_file(voice_file_id)
+
+    logger.debug(f'User ({user_id}) in {massage_type}: "{voice_file_id}"')
+
+    # checking if the user have registered
+    if not db_manager.is_user_registered(user_id):
+        await update.message.reply_text("Please use /start cmd to register first.")
+        return
+
+    # store file in memory, not on disk
+    buf = io.BytesIO()
+    await voice_file.download_to_memory(buf)
+    buf.name = "voice.oga"  # file extension is required
+    buf.seek(0)  # move cursor to the beginning of the buffer
+
+    # pass the audio to the stt model
+    text = await stt_response(buf, client)
+
+    await update.message.reply_text(text, quote=True)
 
 
 async def error(
     update: Update, context: ContextTypes.DEFAULT_TYPE, logger: logging.Logger
 ):
-    logger.error(f"Update {update} caused error: {context.error}")
+    logger.error(f"Update ({update}) caused error: {context.error}")
+    tb = context.error.__traceback__
+    while tb.tb_next:
+        tb = tb.tb_next
+    logger.error(f"Error occurred on line {tb.tb_lineno} of {__file__}")
