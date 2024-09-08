@@ -124,14 +124,45 @@ async def handle_voice_message(
     # pass the audio to the stt model
     text = await stt_response(buf, client)
 
-    await update.message.reply_text(text, quote=True)
+    # checking if the text is too long
+    if len(text) > 4096:
+        # break into chunks of 4096 characters, ensuring breaks at word boundaries
+        chunks = []
+        for i in range(0, len(text), 4096):
+            end = i + 4096
+            if end < len(text):
+                # Find the last space within the 4096 character limit
+                end = text.rfind(" ", i, end)
+                if end == -1:  # If no space found, force break at 4096
+                    end = i + 4096
+            chunks.append(text[i:end].strip())
+        for chunk in chunks:
+            await update.message.reply_text(chunk, quote=True)
+    else:
+        await update.message.reply_text(text, quote=True)
 
 
 async def error(
     update: Update, context: ContextTypes.DEFAULT_TYPE, logger: logging.Logger
 ):
-    logger.error(f"Update ({update}) caused error: {context.error}")
-    tb = context.error.__traceback__
-    while tb.tb_next:
-        tb = tb.tb_next
-    logger.error(f"Error occurred on line {tb.tb_lineno} of {__file__}")
+    try:
+        raise context.error
+    except Exception as e:
+        logger.error(f"Update ({update}) caused error: {str(e)}")
+
+        tb = e.__traceback__
+        while tb.tb_next:
+            tb = tb.tb_next
+
+        filename = tb.tb_frame.f_code.co_filename
+        line_number = tb.tb_lineno
+
+        logger.error(
+            f"Error occurred on line {line_number} of {filename}, error: {context.error}"
+        )
+
+        # You might want to notify the user about the error
+        if update and update.effective_message:
+            await update.effective_message.reply_text(
+                "An error occurred while processing your request. Please try again later."
+            )

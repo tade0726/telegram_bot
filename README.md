@@ -15,3 +15,7 @@ python main.py > output.log 2>&1 &
     - where to find a reference project
 
 - 
+
+## bug fix 
+
+- [x] long recording is not aceptiable in openai api
