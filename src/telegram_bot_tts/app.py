@@ -45,9 +45,7 @@ if __name__ == "__main__":
         )
     )
     app.add_handler(
-        CommandHandler(
-            "help", lambda update, context: help(update, context, db_manager)
-        )
+        CommandHandler("help", lambda update, context: help(update, context))
     )
 
     # text Messages

@@ -11,10 +11,7 @@ python main.py > output.log 2>&1 &
 
 ## TODO
 
-- Adding a conversional chatbot that can hold conversional context.
-    - where to find a reference project
-
-- 
+- [ ] add stats on user usages
 
 ## bug fix 
 

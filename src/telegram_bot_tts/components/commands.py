@@ -12,7 +12,7 @@ async def start(
     # add a welcome message
     await update.message.reply_text(
         "Welcome to the Telegram Bot TTS! I have two simple features: Text to Speech and Speech to Text. \n\n"
-        "You will automatically get 10,000 characters for tts and 60 minutes for stt for free each month in the beginning. "
+        "You will automatically get 10,000 characters for tts and 60 minutes for stt in a 7-days trial. "
         "After that, you will need to buy a plan to continue using the bot. "
     )
 
@@ -42,15 +42,15 @@ async def start(
         )
 
 
-async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def subscribe(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, db_manager: DBManager
+):
     pass
 
 
-async def unsubscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    pass
-
-
-async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def balance(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, db_manager: DBManager
+):
     pass
 
 

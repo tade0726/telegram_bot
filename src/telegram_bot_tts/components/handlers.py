@@ -8,12 +8,14 @@ from telegram.ext import ContextTypes
 from openai import AsyncOpenAI
 
 from telegram_bot_tts.constants import (
-    USERS_ALLOWED,
     BOT_USERNAME,
     AUDIO_FOLDER,
 )
 
 from telegram_bot_tts.db.db_manager import DBManager
+
+from datetime import datetime
+
 
 # Responses
 
@@ -22,28 +24,40 @@ def text_response(text: str) -> str:
     return text
 
 
-async def tts_response(text: str, client: AsyncOpenAI, audio_path: str = None) -> str:
-    # I want to save the audio file in a temporary directory with a unique name, such as a msg id
+async def tts_response(
+    text: str,
+    client: AsyncOpenAI,
+    logger: logging.Logger,
+    audio_path: str = None,
+) -> str:
     audio_file_name = str(text[:10].replace(" ", "_"))
-
     speech_file_path = (
         Path(AUDIO_FOLDER) / f"{audio_file_name}.mp3"
         if audio_path is None
         else audio_path
     )
 
+    t1 = datetime.now()
+
+    logger.debug(f"t1: Starting TTS API request at {t1}")
     response = await client.audio.speech.create(model="tts-1", voice="nova", input=text)
 
-    # Write the response content to a file
+    t2 = datetime.now()
+    logger.debug(f"t2: Finished TTS API request at {t2}")
+
+    api_response_time = (t2 - t1).total_seconds()
+
     with open(speech_file_path, "wb") as file:
         for chunk in response.iter_bytes():
             file.write(chunk)
 
+    logger.debug(f"TTS API response time: {api_response_time:.2f} seconds")
     return speech_file_path
 
 
-async def stt_response(audio: Union[bytes, str], client: AsyncOpenAI) -> str:
-
+async def stt_response(
+    audio: Union[bytes, str], client: AsyncOpenAI, logger: logging.Logger
+) -> str:
     if isinstance(audio, str):
         audio_file = open(audio, "rb")
     elif isinstance(audio, Union[bytes, io.BytesIO]):
@@ -51,10 +65,47 @@ async def stt_response(audio: Union[bytes, str], client: AsyncOpenAI) -> str:
     else:
         raise ValueError("Invalid audio type")
 
+    t1 = datetime.now()
+    logger.debug(f"t1: Starting STT API request at {t1}")
+
     transcript = await client.audio.transcriptions.create(
         model="whisper-1", file=audio_file
     )
+
+    t2 = datetime.now()
+    logger.debug(f"t2: Finished STT API request at {t2}")
+
+    api_response_time = (t2 - t1).total_seconds()
+    logger.debug(f"STT API response time: {api_response_time:.2f} seconds")
     return transcript.text
+
+
+def estimate_audio_time(chars: int) -> int:
+    """
+    Estimate the audio time based on the number of characters.
+    Returns the estimated duration in seconds.
+    """
+    steps = [
+        (10, 1),
+        (50, 20),
+        (100, 40),
+        (150, 60),
+        (200, 80),
+        (250, 100),
+        (300, 120),
+        (900, 5 * 60),
+        (1800, 10 * 60),
+        (2750, 15 * 60),
+        (3500, 20 * 60),
+        (5500, 30 * 60),
+        (7500, 45 * 60),
+    ]
+
+    for char_limit, duration in steps:
+        if chars <= char_limit:
+            return duration
+
+    return 60 * 60  # Default to 60 minutes for very long texts
 
 
 async def handle_text_message(
@@ -87,12 +138,18 @@ async def handle_text_message(
     else:
         response: str = text_response(text)
 
-    logger.debug(f"Bot reply: {response}")
-
     # return the audio file
-    audio_path = await tts_response(response, client)
+    audio_path = await tts_response(response, client, logger=logger)
 
     await update.message.reply_voice(voice=audio_path, quote=True)
+
+    # catch error
+    try:
+        # get the time of the audio file, using a function to estimate the time of the audio file using a step function
+        audio_secs: int = estimate_audio_time(len(response))
+        db_manager.add_tts_activity(user_id, audio_secs, datetime.now())
+    except Exception as e:
+        logger.error(f"Error adding tts activity: {str(e)}")
 
 
 async def handle_voice_message(
@@ -122,7 +179,7 @@ async def handle_voice_message(
     buf.seek(0)  # move cursor to the beginning of the buffer
 
     # pass the audio to the stt model
-    text = await stt_response(buf, client)
+    text = await stt_response(buf, client, logger=logger)
 
     # checking if the text is too long
     if len(text) > 4096:
@@ -140,6 +197,12 @@ async def handle_voice_message(
             await update.message.reply_text(chunk, quote=True)
     else:
         await update.message.reply_text(text, quote=True)
+
+    # catch error
+    try:
+        db_manager.add_stt_activity(user_id, len(text), datetime.now())
+    except Exception as e:
+        logger.error(f"Error adding stt activity: {str(e)}")
 
 
 async def error(
