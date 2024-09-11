@@ -7,13 +7,13 @@ build:
 teardown:
 	docker-compose down -v
 
-local_run:
+run:
 	uv run src/telegram_bot_tts/app.py
 
 test:
 	PYTHONPATH=. uv run pytest tests 
 
-local_db_run:
+db_run:
 # start local db in background with default port and initialize database as telegram_bot_dev
 	cockroach start-single-node --insecure --store=cockroach-data \
 	--listen-addr=localhost:26257 \

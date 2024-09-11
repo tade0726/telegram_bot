@@ -51,7 +51,8 @@ class Subscription(Base):
     user_id = Column(Integer, ForeignKey("users.user_id"))
     start_date = Column(Date, nullable=False)
     end_date = Column(Date)
-    amount = Column(Float, nullable=False)
+    monthly_quota = Column(Float, nullable=False)
+    subscription_months = Column(Integer, nullable=False)
 
 
 class Payment(Base):
@@ -91,8 +92,8 @@ class DBManager:
         self.Session = sessionmaker(bind=self.engine)
 
     def create_tables(self):
-        session = self.Session()
         try:
+            session = self.Session()
             Base.metadata.create_all(self.engine)
             return True
         except Exception as e:
@@ -144,14 +145,22 @@ class DBManager:
             session.close()
 
     def add_payment(
-        self, user_id, amount, payment_method, payment_id, start_date, end_date
+        self,
+        user_id: int,
+        amount: float,
+        payment_reference: str,
+        payment_method: str,
+        start_date: date,
+        end_date: date,
+        monthly_quota: float,
+        subscription_months: int,
     ):
 
         try:
             session = self.Session()
             # add payment
             payment = Payment(
-                payment_id=payment_id,
+                payment_reference=payment_reference,
                 user_id=user_id,
                 amount=amount,
                 payment_method=payment_method,
@@ -167,6 +176,8 @@ class DBManager:
                 amount=amount,
                 start_date=start_date,
                 end_date=end_date,
+                monthly_quota=monthly_quota,
+                subscription_months=subscription_months,
             )
             session.add(subscription)
             session.commit()
@@ -178,7 +189,9 @@ class DBManager:
         finally:
             session.close()
 
-    def add_text_to_speech_activity(self, user_id, used_chars):
+    def add_text_to_speech_activity(
+        self, user_id: int, used_chars: float, timestamp: datetime
+    ):
         """
         Whisper $0.006 / minute (rounded to the nearest second)
         TTS $15.000 / 1M characters
@@ -187,9 +200,10 @@ class DBManager:
         try:
             session = self.Session()
             # calculate cost
-            cost = (used_chars / 1000000) * 15
+            # todo: make it parametric
+            cost = (used_chars / 1000000) * 15 * 1.20
             tts_activity = TextToSpeechActivity(
-                user_id=user_id, used_chars=used_chars, cost=cost
+                user_id=user_id, used_chars=used_chars, cost=cost, timestamp=timestamp
             )
             session.add(tts_activity)
             session.commit()
@@ -200,7 +214,9 @@ class DBManager:
         finally:
             session.close()
 
-    def add_speech_to_text_activity(self, user_id, used_seconds):
+    def add_speech_to_text_activity(
+        self, user_id: int, used_seconds: float, timestamp: datetime
+    ):
         """
         Whisper $0.006 / minute (rounded to the nearest second)
         TTS $15.000 / 1M characters
@@ -209,9 +225,13 @@ class DBManager:
         try:
             session = self.Session()
             # calculate cost
-            cost = (used_seconds / 60) * 0.006
+            # todo: make it parametric
+            cost = (used_seconds / 60) * 0.006 * 1.20
             stt_activity = SpeechToTextActivity(
-                user_id=user_id, used_seconds=used_seconds, cost=cost
+                user_id=user_id,
+                used_seconds=used_seconds,
+                cost=cost,
+                timestamp=timestamp,
             )
             session.add(stt_activity)
             session.commit()
@@ -231,7 +251,16 @@ class DBManager:
 
             # add 3 payments
             for i in range(1, 4):
-                self.add_payment(i, 100, "Credit Card", i, date.today(), date.today() + timedelta(days=30))
+                self.add_payment(
+                    i,
+                    100,
+                    "Credit Card",
+                    i,
+                    date.today(),
+                    date.today() + timedelta(days=30),
+                    5,
+                    1,
+                )
 
             # add 6 tts activities
             for i in range(1, 7):
@@ -297,10 +326,5 @@ if __name__ == "__main__":
             print("Error adding mock data")
 
     if True:
-        # create view
-        # db_manager.create_eligibility_view()
-
-        # check if user is eligible
-        # is_eligible, status = db_manager.is_user_eligible(1)
-        # print(f"User 1 is eligible: {is_eligible}, status: {status}")
+        # todo create view for user cost calculation
         pass

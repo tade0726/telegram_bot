@@ -80,34 +80,6 @@ async def stt_response(
     return transcript.text
 
 
-def estimate_audio_time(chars: int) -> int:
-    """
-    Estimate the audio time based on the number of characters.
-    Returns the estimated duration in seconds.
-    """
-    steps = [
-        (10, 1),
-        (50, 20),
-        (100, 40),
-        (150, 60),
-        (200, 80),
-        (250, 100),
-        (300, 120),
-        (900, 5 * 60),
-        (1800, 10 * 60),
-        (2750, 15 * 60),
-        (3500, 20 * 60),
-        (5500, 30 * 60),
-        (7500, 45 * 60),
-    ]
-
-    for char_limit, duration in steps:
-        if chars <= char_limit:
-            return duration
-
-    return 60 * 60  # Default to 60 minutes for very long texts
-
-
 async def handle_text_message(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -146,8 +118,7 @@ async def handle_text_message(
     # catch error
     try:
         # get the time of the audio file, using a function to estimate the time of the audio file using a step function
-        audio_secs: int = estimate_audio_time(len(response))
-        db_manager.add_tts_activity(user_id, audio_secs, datetime.now())
+        db_manager.add_text_to_speech_activity(user_id, len(text), datetime.now())
     except Exception as e:
         logger.error(f"Error adding tts activity: {str(e)}")
 
@@ -160,10 +131,12 @@ async def handle_voice_message(
     db_manager: DBManager,
 ):
 
+    # parse the voice message
     user_id: int = update.message.from_user.id
     massage_type: str = update.message.chat.type
     voice_file_id: str = update.message.voice.file_id
     voice_file = await context.bot.get_file(voice_file_id)
+    voice_file_duration: float = update.message.voice.duration
 
     logger.debug(f'User ({user_id}) in {massage_type}: "{voice_file_id}"')
 
@@ -200,7 +173,9 @@ async def handle_voice_message(
 
     # catch error
     try:
-        db_manager.add_stt_activity(user_id, len(text), datetime.now())
+        db_manager.add_speech_to_text_activity(
+            user_id, voice_file_duration, datetime.now()
+        )
     except Exception as e:
         logger.error(f"Error adding stt activity: {str(e)}")
 
