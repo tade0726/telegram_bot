@@ -26,6 +26,10 @@ logger = setup_logger("telegram_bot_tts", ENV)
 
 if __name__ == "__main__":
 
+    # the timeout varibles will be set here
+    READ_TIMEOUT = 180
+    WRITE_TIMEOUT = 180
+
     # create the audio folder
     create_audio_folder()
 
@@ -36,7 +40,13 @@ if __name__ == "__main__":
     db_manager = DBManager()
 
     logger.info("starting bot...")
-    app = Application.builder().token(TOKEN).read_timeout(30).write_timeout(90).build()
+    app = (
+        Application.builder()
+        .token(TOKEN)
+        .read_timeout(READ_TIMEOUT)
+        .write_timeout(WRITE_TIMEOUT)
+        .build()
+    )
 
     # Commands
     app.add_handler(
