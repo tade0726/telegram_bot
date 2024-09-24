@@ -140,7 +140,7 @@ class DBManager:
             session = self.Session()
             # calculate cost
             # todo: make it parametric
-            cost = (used_chars / 1000000) * 15 * 1.20
+            cost = (used_chars / 1000000) * 15 * 1
             tts_activity = TextToSpeechActivity(
                 user_id=user_id, used_chars=used_chars, cost=cost, timestamp=timestamp
             )
@@ -165,7 +165,7 @@ class DBManager:
             session = self.Session()
             # calculate cost
             # todo: make it parametric
-            cost = (used_seconds / 60) * 0.006 * 1.20
+            cost = (used_seconds / 60) * 0.006 * 1
             stt_activity = SpeechToTextActivity(
                 user_id=user_id,
                 used_seconds=used_seconds,
