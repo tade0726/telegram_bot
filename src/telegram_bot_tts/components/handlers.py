@@ -16,7 +16,6 @@ from telegram_bot_tts.db.db_manager import DBManager
 
 from datetime import datetime
 
-
 # Responses
 
 

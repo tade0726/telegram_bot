@@ -5,6 +5,8 @@ from telegram_bot_tts.db.db_manager import DBManager
 
 
 # commands
+
+
 async def start(
     update: Update, context: ContextTypes.DEFAULT_TYPE, db_manager: DBManager
 ):
@@ -12,8 +14,8 @@ async def start(
     # add a welcome message
     await update.message.reply_text(
         "Welcome to the Telegram Bot TTS! I have two simple features: Text to Speech and Speech to Text. \n\n"
-        "You will automatically get 10,000 characters for tts and 60 minutes for stt in a 7-days trial. "
-        "After that, you will need to buy a plan to continue using the bot. "
+        "It is just a fun side project, all users will share a total of 3 dollors quota for tts and stt. "
+        "You can use the bot by sending a voice message or a text message. "
     )
 
     # check if the user is already registered
@@ -61,8 +63,5 @@ async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Here are the commands you can use: \n\n"
         "/start - Start the bot and get a welcome message\n"
-        "/subscribe - Subscribe to the bot to get unlimited access\n"
-        "/unsubscribe - Unsubscribe from the bot\n"
-        "/balance - Check your balance\n"
         "/help - Get help with the bot\n\n"
     )

@@ -3,7 +3,6 @@ from telegram import Update
 from telegram.ext import (
     MessageHandler,
     filters,
-    ContextTypes,
     Application,
     CommandHandler,
 )
@@ -49,11 +48,13 @@ if __name__ == "__main__":
     )
 
     # Commands
+
     app.add_handler(
         CommandHandler(
             "start", lambda update, context: start(update, context, db_manager)
         )
     )
+
     app.add_handler(
         CommandHandler("help", lambda update, context: help(update, context))
     )
