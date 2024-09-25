@@ -62,6 +62,6 @@ async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "Here are the commands you can use: \n\n"
-        "/start - Start the bot and get a welcome message\n"
+        "/start - Register for a free usage, and get a description of the bot\n"
         "/help - Get help with the bot\n\n"
     )

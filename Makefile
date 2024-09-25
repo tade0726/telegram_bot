@@ -1,3 +1,7 @@
+include .env
+
+export $(shell sed 's/=.*//' .env)
+
 format:
 	black src/ tests/
 
@@ -9,10 +13,10 @@ teardown:
 
 run:
 	mkdir -p logs
-	source .env && uv run src/telegram_bot_tts/app.py > logs/app.log 2>&1 &
+	uv run src/telegram_bot_tts/app.py > logs/app.log 2>&1 &
 
 run_local:
-	source .env && uv run src/telegram_bot_tts/app.py
+	uv run src/telegram_bot_tts/app.py
 
 test:
 	PYTHONPATH=. uv run pytest tests 
@@ -25,4 +29,4 @@ db_run:
 	cockroach sql --insecure -e "CREATE DATABASE IF NOT EXISTS telegram_bot_dev;"
 
 sync:
-	rsync -avz --exclude-from=.gitignore --exclude=.git ./ root@vps:/root/apps/openai_tts_telegram_bot
+	rsync -avz --exclude-from=.gitignore --exclude=.git ./ dev@vps:/home/dev/apps/openai_tts_telegram_bot

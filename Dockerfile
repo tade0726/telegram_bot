@@ -13,7 +13,7 @@ RUN sh /uv-installer.sh && rm /uv-installer.sh
 ENV PATH="/root/.cargo/bin/:$PATH"
 
 # Copy the project into the image
-ADD . /app
+ADD . /app 
 WORKDIR /app
 
 # Sync the project into a new environment
