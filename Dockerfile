@@ -19,5 +19,8 @@ WORKDIR /app
 # Sync the project into a new environment
 RUN uv sync
 
+# cert for cockroachdb
+RUN curl --create-dirs -o $HOME/.postgresql/root.crt 'https://cockroachlabs.cloud/clusters/6b8e7f9d-0da6-419d-8312-a3f806965cc0/cert'
+
 # Presuming there is a `my_app` command provided by the project
 CMD ["uv", "run", "src/telegram_bot_tts/app.py"]
