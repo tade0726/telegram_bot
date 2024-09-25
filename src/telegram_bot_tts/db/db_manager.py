@@ -1,8 +1,4 @@
-"""
-Todo:
-    - add logging
-"""
-
+import logging
 from sqlalchemy import (
     create_engine,
     Column,
@@ -19,56 +15,53 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 from sqlalchemy.sql import func
 from sqlalchemy import text
+from sqlalchemy.dialects.postgresql import ENUM
 
 import os
+from datetime import date, timedelta, datetime
 
+from telegram_bot_tts.constants import VIP_USER_ID_LIST
 
 Base = declarative_base()
+
+logger = logging.getLogger(__name__)
 
 
 class User(Base):
     __tablename__ = "users"
     user_id = Column(Integer, primary_key=True)
-    username = Column(String(50), unique=True, nullable=False)
-    email = Column(String(100), unique=True, nullable=False)
+    first_name = Column(String, nullable=True)
+    last_name = Column(String, nullable=True)
+    username = Column(String, nullable=True)
+    is_vip = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
-class Subscription(Base):
-    __tablename__ = "subscriptions"
-    subscription_id = Column(Integer, primary_key=True)
+# create a table for free trial
+class FreeTrial(Base):
+    __tablename__ = "free_trials"
+    free_trial_id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.user_id"))
-    plan_name = Column(String(50), nullable=False)
-    is_active = Column(Boolean, default=True)
     start_date = Column(Date, nullable=False)
     end_date = Column(Date)
-    tts_monthly_limit = Column(Integer)
-    stt_monthly_limit = Column(Integer)
-
-
-class Payment(Base):
-    __tablename__ = "payments"
-    payment_id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.user_id"))
-    subscription_id = Column(Integer, ForeignKey("subscriptions.subscription_id"))
     amount = Column(Float, nullable=False)
-    payment_date = Column(DateTime(timezone=True), server_default=func.now())
-    payment_method = Column(String(50))
 
 
-class TTSActivity(Base):
-    __tablename__ = "tts_activity"
-    tts_activity_id = Column(Integer, primary_key=True)
+class TextToSpeechActivity(Base):
+    __tablename__ = "text_to_speech_activity"
+    activity_id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.user_id"))
-    character_count = Column(Integer, nullable=False)
+    used_chars = Column(Integer, nullable=False)
+    cost = Column(Float, nullable=False)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
 
 
-class STTActivity(Base):
-    __tablename__ = "stt_activity"
-    stt_activity_id = Column(Integer, primary_key=True)
+class SpeechToTextActivity(Base):
+    __tablename__ = "speech_to_text_activity"
+    activity_id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.user_id"))
-    duration_seconds = Column(Integer, nullable=False)
+    used_seconds = Column(Integer, nullable=False)
+    cost = Column(Float, nullable=False)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -81,235 +74,199 @@ class DBManager:
         Base.metadata.create_all(self.engine)
         self.Session = sessionmaker(bind=self.engine)
 
-    def add_user(self, user_id, username, email, password_hash):
-        session = self.Session()
+    def create_tables(self):
         try:
-            # Check if user_id, username, or email already exist
-            existing_user = (
-                session.query(User)
-                .filter(
-                    (User.user_id == user_id)
-                    | (User.username == username)
-                    | (User.email == email)
-                )
-                .first()
-            )
+            session = self.Session()
+            Base.metadata.create_all(self.engine)
+            return True
+        except Exception as e:
+            logger.error(f"Error creating tables: {str(e)}")
+            return False
+        finally:
+            session.close()
 
-            if existing_user:
-                session.close()
-                return None  # User already exists
+    def register_user(self, user_id, first_name, last_name, username):
 
-            # If no existing user found, create a new one
-            new_user = User(
+        try:
+            # create session
+            session = self.Session()
+            # create new user
+            user = User(
                 user_id=user_id,
+                first_name=first_name,
+                last_name=last_name,
                 username=username,
-                email=email,
-                password_hash=password_hash,
+                is_vip=user_id in VIP_USER_ID_LIST,
             )
-            session.add(new_user)
+            session.add(user)
             session.commit()
-            user_id = new_user.user_id
-            return user_id
+
+            # create free trial, for 7 days
+            free_trial = FreeTrial(
+                user_id=user_id,
+                start_date=date.today(),
+                end_date=date.today() + timedelta(days=7),
+                amount=1,
+            )
+            session.add(free_trial)
+            session.commit()
+            return True
         except Exception as e:
-            session.rollback()
-            raise e
+            logger.error(f"Error registering user: {str(e)}")
+            return False
         finally:
             session.close()
 
-    def add_subscription(
-        self, user_id, plan_name, start_date, end_date, tts_limit, stt_limit
+    def is_user_registered(self, user_id):
+        try:
+            session = self.Session()
+            user = session.query(User).filter(User.user_id == user_id).first()
+            return user is not None
+        except Exception as e:
+            logger.error(f"Error checking if user is registered: {str(e)}")
+            return False
+        finally:
+            session.close()
+
+    def add_text_to_speech_activity(
+        self, user_id: int, used_chars: float, timestamp: datetime
     ):
-        session = self.Session()
-        new_subscription = Subscription(
-            user_id=user_id,
-            plan_name=plan_name,
-            start_date=start_date,
-            end_date=end_date,
-            tts_monthly_limit=tts_limit,
-            stt_monthly_limit=stt_limit,
-        )
-        session.add(new_subscription)
-        session.commit()
-        subscription_id = new_subscription.subscription_id
-        session.close()
-        return subscription_id
+        """
+        Whisper $0.006 / minute (rounded to the nearest second)
+        TTS $15.000 / 1M characters
+        """
 
-    def add_payment(self, user_id, subscription_id, amount, payment_method):
-        session = self.Session()
-        new_payment = Payment(
-            user_id=user_id,
-            subscription_id=subscription_id,
-            amount=amount,
-            payment_method=payment_method,
-        )
-        session.add(new_payment)
-        session.commit()
-        payment_id = new_payment.payment_id
-        session.close()
-        return payment_id
-
-    def add_tts_activity(self, user_id, character_count):
-        session = self.Session()
-        new_activity = TTSActivity(user_id=user_id, character_count=character_count)
-        session.add(new_activity)
-        session.commit()
-        activity_id = new_activity.tts_activity_id
-        session.close()
-        return activity_id
-
-    def add_stt_activity(self, user_id, duration_seconds):
-        session = self.Session()
-        new_activity = STTActivity(user_id=user_id, duration_seconds=duration_seconds)
-        session.add(new_activity)
-        session.commit()
-        activity_id = new_activity.stt_activity_id
-        session.close()
-        return activity_id
-
-    def create_stt_usage_view(self):
-        session = self.Session()
         try:
-            session.execute(
-                text(
-                    """
-                CREATE OR REPLACE VIEW stt_usage AS
-                SELECT u.user_id,
-                       u.username,
-                       s.plan_name,
-                       s.stt_monthly_limit,
-                       COALESCE(SUM(sa.duration_seconds), 0) AS total_stt_usage,
-                       s.stt_monthly_limit - COALESCE(SUM(sa.duration_seconds), 0) AS remaining_stt_limit
-                FROM users u
-                LEFT JOIN subscriptions s ON u.user_id = s.user_id AND s.is_active = true
-                LEFT JOIN stt_activity sa ON u.user_id = sa.user_id AND sa.timestamp >= 
-                    date_trunc('month'::text, CURRENT_DATE::timestamp with time zone)
-                GROUP BY u.user_id, u.username, s.plan_name, s.stt_monthly_limit
-            """
-                )
+            session = self.Session()
+            # calculate cost
+            # todo: make it parametric
+            cost = (used_chars / 1000000) * 15 * 1
+            tts_activity = TextToSpeechActivity(
+                user_id=user_id, used_chars=used_chars, cost=cost, timestamp=timestamp
             )
+            session.add(tts_activity)
             session.commit()
-            print("STT usage view created successfully.")
+            return True
         except Exception as e:
-            session.rollback()
-            print(f"Error creating STT usage view: {str(e)}")
+            logger.error(f"Error adding tts activity: {str(e)}")
+            return False
         finally:
             session.close()
 
-    def create_tts_usage_view(self):
-        session = self.Session()
+    def add_speech_to_text_activity(
+        self, user_id: int, used_seconds: float, timestamp: datetime
+    ):
+        """
+        Whisper $0.006 / minute (rounded to the nearest second)
+        TTS $15.000 / 1M characters
+        """
+
         try:
-            session.execute(
-                text(
-                    """
-                CREATE OR REPLACE VIEW tts_usage AS
-                SELECT u.user_id,
-                       u.username,
-                       s.plan_name,     
-                       s.tts_monthly_limit,
-                       COALESCE(SUM(ta.character_count), 0) AS total_tts_usage,
-                       s.tts_monthly_limit - COALESCE(SUM(ta.character_count), 0) AS remaining_tts_limit
-                FROM users u
-                LEFT JOIN subscriptions s ON u.user_id = s.user_id AND s.is_active = true
-                LEFT JOIN tts_activity ta ON u.user_id = ta.user_id AND ta.timestamp >= 
-                    date_trunc('month'::text, CURRENT_DATE::timestamp with time zone)
-                GROUP BY u.user_id, u.username, s.plan_name, s.tts_monthly_limit
-            """
-                )
+            session = self.Session()
+            # calculate cost
+            # todo: make it parametric
+            cost = (used_seconds / 60) * 0.006 * 1
+            stt_activity = SpeechToTextActivity(
+                user_id=user_id,
+                used_seconds=used_seconds,
+                cost=cost,
+                timestamp=timestamp,
             )
+            session.add(stt_activity)
             session.commit()
-            print("TTS usage view created successfully.")
+            return True
         except Exception as e:
-            session.rollback()
-            print(f"Error creating TTS usage view: {str(e)}")
-        finally:
-            session.close()
-
-    def get_user_stt_usage(self, user_id):
-        session = self.Session()
-        try:
-            result = session.execute(
-                text("SELECT * FROM stt_usage WHERE user_id = :user_id"),
-                {"user_id": user_id},
-            ).fetchone()
-            return result
-        except Exception as e:
-            print(f"Error fetching STT usage: {str(e)}")
-            return None
-        finally:
-            session.close()
-
-    def get_user_tts_usage(self, user_id):
-        session = self.Session()
-        try:
-            result = session.execute(
-                text("SELECT * FROM tts_usage WHERE user_id = :user_id"),
-                {"user_id": user_id},
-            ).fetchone()
-            return result
-        except Exception as e:
-            print(f"Error fetching TTS usage: {str(e)}")
-            return None
-        finally:
-            session.close()
-
-    def execute_sql_file(self, file):
-        session = self.Session()
-        try:
-            session.execute(text(file.read()))
-            session.commit()
-        except Exception as e:
-            session.rollback()
-            print(f"Error executing SQL file: {str(e)}")
+            logger.error(f"Error adding stt activity: {str(e)}")
+            return False
         finally:
             session.close()
 
     def drop_tables(self):
-        session = self.Session()
-        try:
-            # drop views first
-            session.execute(text("DROP VIEW IF EXISTS stt_usage CASCADE"))
-            session.execute(text("DROP VIEW IF EXISTS tts_usage CASCADE"))
 
-            # drop tables
-            session.execute(text("DROP TABLE IF EXISTS users CASCADE"))
-            session.execute(text("DROP TABLE IF EXISTS subscriptions CASCADE"))
-            session.execute(text("DROP TABLE IF EXISTS payments CASCADE"))
-            session.execute(text("DROP TABLE IF EXISTS tts_activity CASCADE"))
-            session.execute(text("DROP TABLE IF EXISTS stt_activity CASCADE"))
+        try:
+            session = self.Session()
+            # drop all the view first
+            session.execute(text("DROP VIEW IF EXISTS user_eligibility CASCADE;"))
+            session.commit()
+
+            # drop all the tables
+            Base.metadata.drop_all(self.engine)
+            return True
         except Exception as e:
-            session.rollback()
-            print(f"Error dropping tables: {str(e)}")
+            logger.error(f"Error dropping tables: {str(e)}")
+            return False
+        finally:
+            session.close()
+
+    def create_eligibility_view(self):
+        # create view for user eligibility, all users combined will share the same quota of 3 dollars in total on a monthly basis with TTS and STT
+        try:
+            session = self.Session()
+            session.execute(
+                text(
+                    """
+                    CREATE OR REPLACE VIEW user_eligibility AS
+                    SELECT
+                        CASE
+                            WHEN COALESCE(SUM(cost), 0) <= 3 THEN TRUE
+                            ELSE FALSE
+                        END AS is_eligible
+                    FROM (
+                        SELECT
+                            cost
+                        FROM text_to_speech_activity
+                        WHERE DATE_TRUNC('month', timestamp) = DATE_TRUNC('month', CURRENT_DATE)
+                        UNION ALL
+                        SELECT
+                            cost
+                        FROM speech_to_text_activity
+                        WHERE DATE_TRUNC('month', timestamp) = DATE_TRUNC('month', CURRENT_DATE)
+                    ) AS combined_costs;
+                    """
+                )
+            )
+            session.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error creating eligibility view: {str(e)}")
+            return False
+        finally:
+            session.close()
+
+    def check_user_eligibility(self, user_id: int) -> bool:
+        # check view user_eligibility, it is a view just have one column is_eligible and one row of true or false, if true the user is eligible
+        try:
+            if user_id in VIP_USER_ID_LIST:
+                return True
+
+            session = self.Session()
+            user_eligibility = session.execute(
+                text("SELECT * FROM user_eligibility")
+            ).scalar()
+            return user_eligibility == True
+        except Exception as e:
+            logger.error(f"Error checking user eligibility: {str(e)}")
+            return False
         finally:
             session.close()
 
 
 if __name__ == "__main__":
+
     # Create a DBManager instance
     db_manager = DBManager()
 
-    if False:
+    if True:
+        # drop tables
         db_manager.drop_tables()
 
-    # init tables using mock data from mock_data.sql, also using the table classes to create the tables
-    if True:
-        db_manager.execute_sql_file(
-            open(
-                os.path.join(
-                    os.path.dirname(__file__),
-                    "..",
-                    "..",
-                    "..",
-                    "postgres",
-                    "mock_data.sql",
-                ),
-                "r",
-            )
-        )
+        # init tables
+        db_manager.create_tables()
 
-    # Create views
     if True:
-        db_manager.create_stt_usage_view()
-        db_manager.create_tts_usage_view()
+        # todo create view for user cost calculation
+        db_manager.create_eligibility_view()
 
-    # print user stt usage
-    print(db_manager.get_user_stt_usage(3))
+    if False:
+        # check user eligibility
+        print(db_manager.check_user_eligibility(1))
