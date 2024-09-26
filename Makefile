@@ -1,3 +1,7 @@
+include .env
+
+export $(shell sed 's/=.*//' .env)
+
 format:
 	black src/ tests/
 
@@ -8,6 +12,10 @@ teardown:
 	docker-compose down -v
 
 run:
+	mkdir -p logs
+	uv run src/telegram_bot_tts/app.py > logs/app.log 2>&1 &
+
+run_local:
 	uv run src/telegram_bot_tts/app.py
 
 test:
@@ -19,3 +27,6 @@ db_run:
 	--listen-addr=localhost:26257 \
 	--http-addr=localhost:8080
 	cockroach sql --insecure -e "CREATE DATABASE IF NOT EXISTS telegram_bot_dev;"
+
+sync:
+	rsync -avz --exclude-from=.gitignore --exclude=.git ./ dev@vps:/home/dev/apps/openai_tts_telegram_bot
