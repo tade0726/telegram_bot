@@ -128,6 +128,9 @@ class DBManager:
         finally:
             session.close()
 
+    def is_vip(self, user_id):
+        return user_id in VIP_USER_ID_LIST
+
     def add_text_to_speech_activity(
         self, user_id: int, used_chars: float, timestamp: datetime
     ):

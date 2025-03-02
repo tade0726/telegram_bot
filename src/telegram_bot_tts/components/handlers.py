@@ -94,6 +94,11 @@ async def handle_text_message(
 
     logger.debug(f'User ({user_id}) in {massage_type}: "{text}"')
 
+    # only allow vip to use the bot
+    if not db_manager.is_vip(user_id):
+        await update.message.reply_text("Only VIP users can use the bot.")
+        return
+
     # checking if the user have registered
     if not db_manager.is_user_registered(user_id):
         await update.message.reply_text("Please use /start cmd to register first.")
@@ -138,6 +143,11 @@ async def handle_voice_message(
     voice_file_duration: float = update.message.voice.duration
 
     logger.debug(f'User ({user_id}) in {massage_type}: "{voice_file_id}"')
+
+    # only allow vip to use the bot
+    if not db_manager.is_vip(user_id):
+        await update.message.reply_text("Only VIP users can use the bot.")
+        return
 
     # checking if the user have registered
     if not db_manager.is_user_registered(user_id):
